@@ -10,19 +10,12 @@ if [[ "$(id -u)" -ne 0 ]]; then
   exit 1
 fi
 
-if [[ ! -r /etc/os-release ]]; then
-  echo "Cannot detect operating system." >&2
-  exit 1
-fi
-
 . /etc/os-release
 if [[ "${ID:-}" != "ubuntu" ]]; then
   echo "PGClockToolBox requires Ubuntu 22.04+." >&2
   exit 1
 fi
-
 major="${VERSION_ID%%.*}"
-minor="${VERSION_ID#*.}"
 if (( major < 22 )); then
   echo "PGClockToolBox requires Ubuntu 22.04+. Detected ${VERSION_ID}." >&2
   exit 1
@@ -35,7 +28,7 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y python3 python3-venv python3-pip git
+apt-get install -y python3 python3-venv python3-pip git curl ca-certificates unzip procps iproute2 sqlite3 wireguard-tools
 
 if [[ -d "$APP_ROOT/.git" ]]; then
   git -C "$APP_ROOT" fetch --all --prune
@@ -51,6 +44,8 @@ python3 -m venv "$VENV"
 "$VENV/bin/pip" install -r "$APP_ROOT/backend/requirements.txt"
 
 install -d -m 0700 /var/lib/pgclocktoolbox/{data,backups,logs}
+"$VENV/bin/python" -c 'from app.services.auth import ensure_token; print("Admin token initialized."); print("Token file: /var/lib/pgclocktoolbox/data/admin_token")' --check 2>/dev/null || true
+PYTHONPATH="$APP_ROOT/backend" "$VENV/bin/python" -c 'from app.services.auth import ensure_token; ensure_token()'
 
 install -m 0644 "$APP_ROOT/systemd/pgclocktoolbox.service" /etc/systemd/system/pgclocktoolbox.service
 systemctl daemon-reload
@@ -63,3 +58,4 @@ if ! systemctl is-active --quiet pgclocktoolbox.service; then
 fi
 
 echo "PGClockToolBox is running on port 6000."
+echo "Admin token: /var/lib/pgclocktoolbox/data/admin_token"
