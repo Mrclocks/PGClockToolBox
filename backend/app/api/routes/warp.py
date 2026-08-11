@@ -23,6 +23,24 @@ async def warp_status() -> dict[str, object]:
     return asdict(warp.status())
 
 
+@router.post("/install")
+async def warp_install() -> dict[str, object]:
+    try:
+        warp.install()
+        return {"ok": True, "status": asdict(warp.status())}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/register")
+async def warp_register() -> dict[str, object]:
+    try:
+        warp.register()
+        return {"ok": True, "status": asdict(warp.status())}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @router.post("/connect")
 async def warp_connect() -> dict[str, object]:
     try:
