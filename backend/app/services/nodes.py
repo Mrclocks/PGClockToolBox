@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
 
-
 CANDIDATE_ROOTS = [Path("/opt"), Path("/etc"), Path("/var/lib")]
-KEYWORDS = ("pg-node", "pasarguard-node", "pasarguard_node")
+KEYWORDS = ("pg-node", "pasarguard-node", "pasarguard_node", "pasarguardnode")
+NODE_SERVICE_RE = re.compile(r"^(?:pg-node|node-[a-zA-Z0-9_.-]+)(?:\.service)?$")
 
 
 def _run(args: list[str], timeout: int = 5) -> subprocess.CompletedProcess[str]:
@@ -16,8 +16,21 @@ def _run(args: list[str], timeout: int = 5) -> subprocess.CompletedProcess[str]:
 
 def discover_local_nodes() -> list[dict[str, object]]:
     found: dict[str, dict[str, object]] = {}
+
+    # Official one-click installations can create a named service such as node-eu-1.
+    if shutil.which("systemctl"):
+        units = _run(["systemctl", "list-unit-files", "--type=service", "--no-legend", "--no-pager"], 8)
+        if units.returncode == 0:
+            for line in units.stdout.splitlines():
+                name = line.split(None, 1)[0] if line.split() else ""
+                if not NODE_SERVICE_RE.fullmatch(name):
+                    continue
+                unit = name.removesuffix(".service")
+                state = _run(["systemctl", "is-active", name], 4).stdout.strip()
+                found[unit] = {"name": unit, "service": name, "status": state or "unknown", "source": "systemd"}
+
     if shutil.which("docker"):
-        ps = _run(["docker", "ps", "-a", "--format", "{{.Names}}\\t{{.Image}}\\t{{.Status}}"])
+        ps = _run(["docker", "ps", "-a", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}"], 8)
         if ps.returncode == 0:
             for line in ps.stdout.splitlines():
                 parts = line.split("\t")
@@ -25,7 +38,7 @@ def discover_local_nodes() -> list[dict[str, object]]:
                     continue
                 name, image, status = parts
                 low = f"{name} {image}".lower()
-                if any(k in low for k in KEYWORDS):
+                if any(k in low for k in KEYWORDS) or "pasarguard/node" in low:
                     found[name] = {"name": name, "image": image, "status": status, "source": "docker"}
 
     for base in CANDIDATE_ROOTS:
