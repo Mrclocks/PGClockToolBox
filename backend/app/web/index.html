@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PGClockToolBox</title>
+  <style>
+    :root{font-family:Vazirmatn,Vazir,system-ui,sans-serif;color-scheme:dark;--bg:#0b0d10;--panel:#12161b;--muted:#8d96a3;--text:#f5f7fa;--accent:#ff7a18;--border:#242a32}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);min-height:100vh}main{max-width:1180px;margin:auto;padding:28px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}.brand{font-size:22px;font-weight:800}.brand span{color:var(--accent)}.status{border:1px solid var(--border);border-radius:999px;padding:8px 12px;color:#9fe3b1;background:#102016}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:18px}.label{color:var(--muted);font-size:13px}.value{font-size:20px;font-weight:700;margin-top:8px}.section{margin-top:22px}.section h2{font-size:16px;margin:0 0 12px}.wide{display:grid;grid-template-columns:2fr 1fr;gap:14px}.item{display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--border)}.item:last-child{border-bottom:0}.ok{color:#8ee5a7}.muted{color:var(--muted)}@media(max-width:800px){main{padding:18px}.grid{grid-template-columns:repeat(2,1fr)}.wide{grid-template-columns:1fr}}@media(max-width:480px){.grid{grid-template-columns:1fr}.top{align-items:flex-start;flex-direction:column}}
+  </style>
+</head>
+<body>
+<main>
+  <header class="top"><div class="brand">PGClock<span>ToolBox</span></div><div class="status">● سرور متصل است</div></header>
+  <section class="grid">
+    <div class="card"><div class="label">سیستم‌عامل</div><div id="os" class="value">در حال بررسی…</div></div>
+    <div class="card"><div class="label">PasarGuard</div><div id="pg" class="value">در حال بررسی…</div></div>
+    <div class="card"><div class="label">دیتابیس</div><div id="db" class="value">در حال بررسی…</div></div>
+    <div class="card"><div class="label">هسته‌ها</div><div id="cores" class="value">در حال بررسی…</div></div>
+  </section>
+  <section class="section wide">
+    <div class="card"><h2>وضعیت سرویس‌ها</h2><div class="item"><span>Xray</span><span id="xray" class="muted">—</span></div><div class="item"><span>WireGuard</span><span id="wg" class="muted">—</span></div><div class="item"><span>Docker</span><span id="docker" class="muted">—</span></div></div>
+    <div class="card"><h2>دسترسی سریع</h2><div class="item"><span>💾 بکاپ</span><span class="muted">به‌زودی</span></div><div class="item"><span>⚡ بهینه‌سازی</span><span class="muted">به‌زودی</span></div><div class="item"><span>🌐 شبکه</span><span class="muted">به‌زودی</span></div></div>
+  </section>
+</main>
+<script>
+fetch('/api/system/discovery').then(r=>r.json()).then(d=>{document.querySelector('#os').textContent=(d.os_version||'Linux')+' · '+d.architecture;document.querySelector('#pg').textContent=d.pasarguard_installed?'نصب شده':'یافت نشد';document.querySelector('#db').textContent=d.database_hint||'نامشخص';document.querySelector('#cores').textContent=(d.xray_installed?'Xray ':'')+(d.wireguard_installed?'WireGuard':'');document.querySelector('#xray').textContent=d.xray_installed?'✓ فعال':'—';document.querySelector('#wg').textContent=d.wireguard_installed?'✓ نصب':'—';document.querySelector('#docker').textContent=d.docker_installed?'✓ نصب':'—'}).catch(()=>{});
+</script>
+</body></html>
