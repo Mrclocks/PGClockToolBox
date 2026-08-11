@@ -41,7 +41,11 @@ def _resolv_conf_servers() -> list[str]:
     if not RESOLV_CONF.exists():
         return []
     values: list[str] = []
-    for line in RESOLV_CONF.read_text(encoding="utf-8", errors="ignore").splitlines():
+    try:
+        text = RESOLV_CONF.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return values
+    for line in text.splitlines():
         line = line.strip()
         if line.startswith("nameserver "):
             value = line.split(None, 1)[1].strip()
@@ -50,33 +54,61 @@ def _resolv_conf_servers() -> list[str]:
     return values
 
 
+def _default_interface() -> str | None:
+    if not shutil.which("ip"):
+        return None
+    result = _run(["ip", "-o", "route", "show", "default"])
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if "dev" in parts:
+            idx = parts.index("dev")
+            if idx + 1 < len(parts):
+                return parts[idx + 1]
+    return None
+
+
+def _resolved_servers() -> list[str]:
+    result = _run(["resolvectl", "status"])
+    if result.returncode != 0:
+        return []
+    servers: list[str] = []
+    for line in result.stdout.splitlines():
+        if "DNS Servers:" in line:
+            tail = line.split(":", 1)[1]
+            for value in tail.split():
+                if value not in servers:
+                    servers.append(value)
+    return servers
+
+
 def status() -> DnsStatus:
-    if shutil.which("resolvectl"):
-        result = _run(["resolvectl", "status"])
-        servers: list[str] = []
-        if result.returncode == 0:
-            for line in result.stdout.splitlines():
-                if "DNS Servers:" in line:
-                    tail = line.split(":", 1)[1]
-                    servers.extend(x for x in tail.split() if x not in servers)
-        if servers:
-            return DnsStatus("systemd-resolved", servers, str(RESOLV_CONF), BACKUP.exists())
+    if shutil.which("resolvectl") and _resolved_servers():
+        return DnsStatus("systemd-resolved", _resolved_servers(), str(RESOLV_CONF), BACKUP.exists())
     return DnsStatus("resolv.conf", _resolv_conf_servers(), str(RESOLV_CONF), BACKUP.exists())
 
 
-def apply(servers: list[str]) -> DnsStatus:
-    values = _valid_servers(servers)
+def _backup_once() -> None:
     if not RESOLV_CONF.exists():
         raise RuntimeError("/etc/resolv.conf does not exist")
     BACKUP.parent.mkdir(parents=True, exist_ok=True)
     if not BACKUP.exists():
         BACKUP.write_bytes(RESOLV_CONF.read_bytes())
 
-    if shutil.which("resolvectl"):
-        result = _run(["resolvectl", "dns", "--interface", "", *values])
-        if result.returncode == 0:
-            return status()
 
+def apply(servers: list[str]) -> DnsStatus:
+    values = _valid_servers(servers)
+    _backup_once()
+
+    if shutil.which("resolvectl"):
+        interface = _default_interface()
+        if interface:
+            result = _run(["resolvectl", "dns", interface, *values])
+            if result.returncode == 0:
+                _run(["resolvectl", "flush-caches"])
+                return status()
+
+    if RESOLV_CONF.is_symlink():
+        raise RuntimeError("/etc/resolv.conf is managed by another resolver; configure that manager instead")
     try:
         lines = ["# Managed by PGClockToolBox", *[f"nameserver {value}" for value in values], ""]
         RESOLV_CONF.write_text("\n".join(lines), encoding="utf-8")
@@ -88,6 +120,8 @@ def apply(servers: list[str]) -> DnsStatus:
 def restore() -> DnsStatus:
     if not BACKUP.exists():
         raise RuntimeError("No DNS backup is available")
+    if RESOLV_CONF.is_symlink():
+        raise RuntimeError("/etc/resolv.conf is managed by another resolver; restore through that manager")
     try:
         RESOLV_CONF.write_bytes(BACKUP.read_bytes())
     except OSError as exc:
