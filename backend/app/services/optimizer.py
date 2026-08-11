@@ -8,14 +8,14 @@ from pathlib import Path
 
 SYSCTL_BACKUP = Path("/var/lib/pgclocktoolbox/data/sysctl.backup")
 
+# Conservative defaults for a VPN/proxy server. rp_filter is intentionally not
+# changed globally because asymmetric VPN/WARP routes can legitimately require it.
 RECOMMENDED = {
     "net.core.default_qdisc": "fq",
     "net.ipv4.tcp_congestion_control": "bbr",
     "net.ipv4.tcp_fastopen": "3",
     "net.ipv4.tcp_mtu_probing": "1",
     "net.ipv4.tcp_syncookies": "1",
-    "net.ipv4.conf.all.rp_filter": "1",
-    "net.ipv4.conf.default.rp_filter": "1",
 }
 
 
@@ -56,19 +56,19 @@ def apply() -> OptimizerStatus:
     if not before.bbr_available:
         raise RuntimeError("BBR is not available in the running kernel")
     _write_backup()
-    changed: list[tuple[str, str]] = []
+    changed: list[str] = []
     try:
         for key, value in RECOMMENDED.items():
             result = _run(["sysctl", "-w", f"{key}={value}"])
             if result.returncode != 0:
                 raise RuntimeError(f"failed to set {key}: {result.stderr.strip()}")
-            changed.append((key, value))
+            changed.append(key)
         after = status()
         if not after.bbr_active or after.qdisc != "fq":
             raise RuntimeError("kernel accepted settings but verification failed")
         return after
     except Exception:
-        for key, _ in reversed(changed):
+        for key in reversed(changed):
             _run(["sysctl", "-w", f"{key}={_read_backup_value(key)}"])
         raise
 
