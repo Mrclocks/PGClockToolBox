@@ -1,0 +1,10 @@
+[Unit]
+Description=PGClockToolBox scheduled backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/pgclocktoolbox/backend
+ExecStart=/opt/pgclocktoolbox/venv/bin/python -m app.services.backup.worker

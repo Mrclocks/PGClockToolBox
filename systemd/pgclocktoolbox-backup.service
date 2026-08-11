@@ -1,0 +1,10 @@
+[Unit]
+Description=PGClockToolBox scheduled backup
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=PYTHONPATH=/opt/pgclocktoolbox/backend
+ExecStart=/usr/bin/python3 -c "from app.services.backup.scheduler import run_now; print(run_now())"
