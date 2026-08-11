@@ -8,7 +8,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/pgclocktoolbox/backend
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/pgclocktoolbox/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 6000
+ExecStart=/opt/pgclocktoolbox/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 7100
 Restart=on-failure
 RestartSec=3
 
