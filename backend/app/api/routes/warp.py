@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -18,14 +20,14 @@ class IpRule(BaseModel):
 
 @router.get("/status")
 async def warp_status() -> dict[str, object]:
-    return warp.status().__dict__
+    return asdict(warp.status())
 
 
 @router.post("/connect")
 async def warp_connect() -> dict[str, object]:
     try:
         warp.connect()
-        return {"ok": True, "status": warp.status().__dict__}
+        return {"ok": True, "status": asdict(warp.status())}
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
