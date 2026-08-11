@@ -3,8 +3,7 @@ from __future__ import annotations
 import json
 import threading
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 from app.core.paths import TOOLBOX_BACKUPS, TOOLBOX_DATA
 from app.services.backup.engine import backup_result_dict, create_full_backup
@@ -50,22 +49,35 @@ def prune(retention: int) -> int:
     return removed
 
 
-def run_now() -> dict[str, object]:
+def run_now(force: bool = False) -> dict[str, object]:
     if not LOCK.acquire(blocking=False):
         return {"status": "running"}
     try:
         value = load()
-        value.last_run = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
+        if not force and not value.enabled:
+            return {"status": "disabled"}
+        if not force and value.last_run:
+            try:
+                last = datetime.fromisoformat(value.last_run)
+                if now < last + timedelta(hours=value.interval_hours):
+                    value.next_run = (last + timedelta(hours=value.interval_hours)).isoformat()
+                    save(value)
+                    return {"status": "not_due", "next_run": value.next_run}
+            except ValueError:
+                pass
+        value.last_run = now.isoformat()
         value.last_status = "running"
         value.last_error = None
         save(value)
         result = create_full_backup()
         value.last_status = "success" if result.ok else "failed"
         value.last_error = result.error
+        value.next_run = (now + timedelta(hours=value.interval_hours)).isoformat()
+        save(value)
         if result.ok:
             prune(value.retention)
-        save(value)
-        return {"status": value.last_status, **backup_result_dict(result)}
+        return {"status": value.last_status, **backup_result_dict(result), "next_run": value.next_run}
     finally:
         LOCK.release()
 
@@ -79,6 +91,7 @@ def configure(enabled: bool, interval_hours: int, retention: int) -> BackupSched
     value.enabled = enabled
     value.interval_hours = interval_hours
     value.retention = retention
+    value.next_run = (datetime.now(timezone.utc) + timedelta(hours=interval_hours)).isoformat() if enabled else None
     save(value)
     if enabled:
         prune(retention)
