@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.core.paths import TOOLBOX_DATA
+from app.core.paths import TOOLBOX_BACKUPS, TOOLBOX_DATA
 from app.services.backup.engine import backup_result_dict, create_full_backup
 
 CONFIG = TOOLBOX_DATA / "backup_schedule.json"
@@ -38,6 +38,18 @@ def save(value: BackupSchedule) -> None:
     tmp.replace(CONFIG)
 
 
+def prune(retention: int) -> int:
+    archives = sorted(TOOLBOX_BACKUPS.glob("pasarguard-full-*.zip"), key=lambda p: p.stat().st_mtime, reverse=True)
+    removed = 0
+    for path in archives[retention:]:
+        try:
+            path.unlink()
+            removed += 1
+        except OSError:
+            pass
+    return removed
+
+
 def run_now() -> dict[str, object]:
     if not LOCK.acquire(blocking=False):
         return {"status": "running"}
@@ -50,6 +62,8 @@ def run_now() -> dict[str, object]:
         result = create_full_backup()
         value.last_status = "success" if result.ok else "failed"
         value.last_error = result.error
+        if result.ok:
+            prune(value.retention)
         save(value)
         return {"status": value.last_status, **backup_result_dict(result)}
     finally:
@@ -66,4 +80,6 @@ def configure(enabled: bool, interval_hours: int, retention: int) -> BackupSched
     value.interval_hours = interval_hours
     value.retention = retention
     save(value)
+    if enabled:
+        prune(retention)
     return value
