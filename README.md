@@ -4,8 +4,9 @@ PasarGuard Server Toolbox — a simple, safe and modern web panel for managing t
 
 ## Scope
 
-- Full PasarGuard + node backup compatible with PGClockMG
-- Telegram delivery with optional proxy and scheduled backups
+- Full PasarGuard + local node backup compatible with PGClockMG
+- Scheduled backups with retention
+- Telegram delivery with optional proxy
 - Server/network optimizer
 - DNS management
 - WARP egress and selective routing
@@ -25,20 +26,17 @@ The panel listens on port `6000` by default.
 
 Default language: Persian (`fa`)
 
-Supported languages:
+Supported languages: Persian (`fa`), English (`en`), Russian (`ru`).
 
-- فارسی (`fa`)
-- English (`en`)
-- Русский (`ru`)
+## Safety principles
 
-## Design principles
-
-1. Safe before clever: never apply a risky network change without validation and rollback protection.
-2. Detect before changing: discover the actual PasarGuard, Xray, WireGuard, database, network and DNS state first.
-3. Verify every operation: Apply → Verify → Roll back or repair when necessary.
-4. No arbitrary shell execution from the web UI.
-5. PGClockMG is treated as an external compatibility target; its source code is not modified.
+1. Detect before changing.
+2. Never expose arbitrary shell execution through the web layer.
+3. Validate network changes and keep rollback data.
+4. A backup is successful only after archive integrity validation.
+5. Telegram delivery is separate from local backup success.
+6. PGClockMG is an external compatibility target; its source code is not modified.
 
 ## Development status
 
-Foundation phase in progress.
+Foundation, backup engine, scheduled delivery, Telegram transport, DNS management, optimizer and WARP controls are implemented on `feature/foundation`. Advanced routing, health/auto-recovery and final hardening remain.
