@@ -2,14 +2,95 @@
 
 > 🛠️ A modern, safe and simple server toolbox for **PasarGuard**.
 
-PGClockToolBox is installed **directly on the same Ubuntu server where PasarGuard is running**. It puts the most important server, backup, network and traffic-management operations behind a clean web panel so users do not need to work with complicated shell commands or configuration files.
+## 🚀 Installation
 
-[![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04%2B-orange?logo=ubuntu)](https://ubuntu.com/)
-[![PasarGuard](https://img.shields.io/badge/PasarGuard-supported-orange)](https://github.com/PasarGuard/panel)
-[![Xray](https://img.shields.io/badge/Core-Xray-orange)](https://github.com/XTLS/Xray-core)
-[![WireGuard](https://img.shields.io/badge/Network-WireGuard-orange)](https://www.wireguard.com/)
+PGClockToolBox is installed **directly on the same Ubuntu server where PasarGuard is already installed**.
+
+### Requirements
+
+- Ubuntu **22.04 or newer**
+- A working PasarGuard installation on the same server
+- Root access
+- Internet access during installation
+
+The installer automatically installs the required system packages, creates an isolated Python environment, installs PGClockToolBox, creates its data/backup directories and registers the systemd service.
+
+### One-line installation
+
+Run the following command as `root`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockToolBox/main/install.sh | bash
+```
+
+> **Important:** Run this on the **PasarGuard server itself**, not on a separate management server.
+
+### Installation process
+
+The installer automatically:
+
+1. Checks that the OS is Ubuntu 22.04+.
+2. Verifies that PasarGuard exists at `/opt/pasarguard`.
+3. Installs required packages.
+4. Downloads PGClockToolBox to `/opt/pgclocktoolbox`.
+5. Creates an isolated Python virtual environment.
+6. Installs backend dependencies.
+7. Creates protected application directories under `/var/lib/pgclocktoolbox`.
+8. Generates the initial admin authentication token.
+9. Installs and enables the `pgclocktoolbox.service` systemd service.
+10. Starts the web panel and verifies that the service is running.
+
+### Open the panel
+
+After installation, open:
+
+```text
+http://SERVER_IP:6000
+```
+
+The installer prints the location of the admin token:
+
+```text
+/var/lib/pgclocktoolbox/data/admin_token
+```
+
+Keep this token private. It provides access to protected Toolbox APIs.
+
+### Check service status
+
+```bash
+systemctl status pgclocktoolbox --no-pager
+```
+
+View logs:
+
+```bash
+journalctl -u pgclocktoolbox -f
+```
+
+Restart:
+
+```bash
+systemctl restart pgclocktoolbox
+```
+
+### Uninstall
+
+PGClockToolBox does not currently provide an automatic destructive uninstall command. If you want to remove it, first preserve any backups under `/var/lib/pgclocktoolbox/backups`, then stop and disable the service before removing its files.
+
+```bash
+systemctl disable --now pgclocktoolbox
+rm -rf /opt/pgclocktoolbox
+rm -rf /var/lib/pgclocktoolbox
+rm -f /etc/systemd/system/pgclocktoolbox.service
+systemctl daemon-reload
+```
+
+> **Warning:** Removing `/var/lib/pgclocktoolbox` deletes Toolbox configuration, logs and locally stored backups. It does **not** uninstall or modify PasarGuard itself.
 
 ## ✨ What is PGClockToolBox?
+
+PGClockToolBox is installed **directly on the same Ubuntu server where PasarGuard is running**. It puts the most important server, backup, network and traffic-management operations behind a clean web panel so users do not need to work with complicated shell commands or configuration files.
 
 PGClockToolBox is designed around one principle:
 
@@ -139,22 +220,6 @@ The UI is designed for both RTL and LTR layouts, with Persian as the default exp
 - Dark/light friendly architecture
 - Designed to avoid unnecessary dashboards and configuration clutter
 
-## 📦 Requirements
-
-PGClockToolBox is intentionally designed for the server that already runs PasarGuard.
-
-### Supported OS
-
-- Ubuntu 22.04+
-
-### Required environment
-
-- PasarGuard installed on the same server
-- Root privileges for installation and system operations
-- Xray and/or WireGuard according to the PasarGuard installation
-
-The application performs installation discovery instead of assuming a fixed server configuration.
-
 ## 🏗️ Architecture
 
 ```text
@@ -193,24 +258,13 @@ The backup contract is documented in:
 docs/backup-restore-contract.md
 ```
 
-The contract covers:
-
-- Database formats
-- Archive layouts
-- Manifest metadata
-- Node recovery information
-- Integrity verification
-- Secrets handling
-- Compatibility metadata
-- Validation fixtures
+The contract covers database formats, archive layouts, manifest metadata, node recovery information, integrity verification, secrets handling, compatibility metadata and validation fixtures.
 
 ## 🔒 Routing Safety
 
 PGClockToolBox does not blindly overwrite PasarGuard's generated Xray configuration.
 
 PasarGuard owns the active core configuration, so the toolbox first works with validated routing policies and previews. Live application must go through the appropriate PasarGuard configuration/API path rather than bypassing the panel's configuration lifecycle.
-
-This prevents a common failure mode where a manually edited configuration is later overwritten by PasarGuard or leaves the panel and core out of sync.
 
 ## 📁 Project Structure
 
@@ -233,7 +287,7 @@ PGClockToolBox/
 │       └── main.py
 ├── docs/
 ├── frontend/
-├── scripts/
+├── deploy/
 ├── systemd/
 └── tests/
 ```
@@ -260,9 +314,7 @@ Verify
 
 ## ⚠️ Production Status
 
-The current branch contains the foundation and the major server-control components, but **not every advanced operation should be considered production-safe merely because its API exists**.
-
-In particular, live routing integration and full end-to-end backup/restore validation against every supported database/version combination require real PasarGuard installations and integration fixtures.
+The foundation and major server-control components are implemented. Live routing integration and full end-to-end backup/restore validation against every supported database/version combination should still be validated on real PasarGuard installations before a stable production release.
 
 Do not enable automated destructive operations on a production server until the corresponding integration test has passed for that environment.
 
