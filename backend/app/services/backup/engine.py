@@ -41,8 +41,8 @@ def _env_map() -> dict[str, str]:
     return values
 
 
-def _run(command: list[str], env: dict[str, str] | None = None, stdin: bytes | None = None, timeout: int = 900) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(command, input=stdin, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, check=False)
+def _run(command: list[str], env: dict[str, str] | None = None, timeout: int = 900) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, check=False)
 
 
 def _database_dump(engine: str, destination: Path) -> None:
@@ -54,7 +54,6 @@ def _database_dump(engine: str, destination: Path) -> None:
         source = next((p for p in candidates if p.exists()), None)
         if source is None:
             raise RuntimeError("PasarGuard SQLite database was not found")
-        # SQLite online backup is safer than a raw copy while the application is active.
         src = sqlite3.connect(str(source), uri=False)
         try:
             dst = sqlite3.connect(str(destination))
@@ -73,22 +72,20 @@ def _database_dump(engine: str, destination: Path) -> None:
     password = unquote(parsed.password or "")
     host = parsed.hostname
     port = str(parsed.port or (3306 if engine in {"mysql", "mariadb"} else 5432))
+    run_env = os.environ.copy()
 
     if engine in {"postgresql", "timescaledb"}:
-        output = destination
-        cmd = ["pg_dump", "--no-owner", "--no-privileges", "--format=custom", "--file", str(output), "--host", host, "--port", port, "--username", user, database]
-        run_env = os.environ.copy()
+        # Plain SQL is intentional: PGClockMG's compatible single-dump contract expects
+        # db_backup.sql, while PostgreSQL custom archives are not that format.
+        cmd = ["pg_dump", "--no-owner", "--no-privileges", "--format=plain", "--file", str(destination), "--host", host, "--port", port, "--username", user, database]
         run_env["PGPASSWORD"] = password
-        result = _run(cmd, env=run_env)
     else:
-        output = destination
         cmd = ["mysqldump", "--single-transaction", "--routines", "--triggers", "--host", host, "--port", port, "--user", user, database]
-        run_env = os.environ.copy()
         run_env["MYSQL_PWD"] = password
-        result = _run(cmd, env=run_env)
-        if result.ok:
-            output.write_bytes(result.stdout)
 
+    result = _run(cmd, env=run_env)
+    if engine in {"mysql", "mariadb"} and result.returncode == 0:
+        destination.write_bytes(result.stdout)
     if result.returncode != 0:
         detail = result.stderr.decode("utf-8", "ignore")[-2500:]
         raise RuntimeError(f"database dump failed: {detail}")
@@ -121,12 +118,14 @@ def _validate_archive(archive: Path) -> None:
             raise RuntimeError("backup manifest is missing")
         manifest = json.loads(zf.read("pgclock/manifest.json"))
         engine = manifest.get("db_engine")
-        if engine == "sqlite" and not any(n.endswith("db.sqlite3") for n in names):
+        if engine == "sqlite" and "db.sqlite3" not in names:
             raise RuntimeError("SQLite backup database is missing")
-        if engine in {"postgresql", "timescaledb"} and "database/db.dump" not in names:
+        if engine in {"postgresql", "timescaledb"} and "db_backup.sql" not in names:
             raise RuntimeError("PostgreSQL backup dump is missing")
-        if engine in {"mysql", "mariadb"} and "database/db.sql" not in names:
+        if engine in {"mysql", "mariadb"} and "db_backup.sql" not in names:
             raise RuntimeError("MySQL/MariaDB backup dump is missing")
+        if ".env" not in names:
+            raise RuntimeError("PasarGuard environment file is missing")
 
 
 def create_full_backup() -> BackupResult:
@@ -141,19 +140,16 @@ def create_full_backup() -> BackupResult:
         with tempfile.TemporaryDirectory(prefix="pgclock-backup-") as td:
             root = Path(td)
             (root / "pgclock").mkdir()
-            (root / "database").mkdir()
             (root / "pasarguard").mkdir()
 
             if engine == "sqlite":
-                _database_dump(engine, root / "database" / "db.sqlite3")
-            elif engine in {"postgresql", "timescaledb"}:
-                _database_dump(engine, root / "database" / "db.dump")
+                _database_dump(engine, root / "db.sqlite3")
             else:
-                _database_dump(engine, root / "database" / "db.sql")
+                _database_dump(engine, root / "db_backup.sql")
 
-            # Keep the restore-critical PasarGuard state. Secrets are intentionally included
-            # in a full backup because PGClockMG needs the deployment environment to restore.
-            _copy_tree(PASARGUARD_ROOT / ".env", root / "pasarguard" / ".env")
+            # These root-level names intentionally mirror PGClockMG's existing
+            # analyzer/restore layouts. No PGClockMG source changes are required.
+            _copy_tree(PASARGUARD_ROOT / ".env", root / ".env")
             for name in ("docker-compose.yml", "compose.yml", "docker-compose.yaml", "compose.yaml"):
                 _copy_tree(PASARGUARD_ROOT / name, root / "pasarguard" / name)
             _copy_tree(PASARGUARD_DATA, root / "pasarguard" / "data")
