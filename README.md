@@ -35,7 +35,7 @@ It will look like:
 ==================================================
 
 Web Panel:
-  http://YOUR_SERVER_IP:6000/
+  http://YOUR_SERVER_IP:7100/
 
 Admin token:
   /var/lib/pgclocktoolbox/data/admin_token
@@ -48,13 +48,13 @@ Logs:
 ==================================================
 ```
 
-Open the displayed `http://YOUR_SERVER_IP:6000/` address in your browser.
+Open the displayed `http://YOUR_SERVER_IP:7100/` address in your browser.
 
 If the panel does not open, first run:
 
 ```bash
 systemctl status pgclocktoolbox --no-pager
-ss -lntp | grep ':6000'
+ss -lntp | grep ':7100'
 ```
 
 Then check:
@@ -63,7 +63,7 @@ Then check:
 journalctl -u pgclocktoolbox -n 100 --no-pager
 ```
 
-> If port `6000` is blocked by your server provider's firewall/security group, allow TCP port `6000` there as well.
+> If port `7100` is blocked by your server provider's firewall/security group, allow TCP port `7100` there as well.
 
 ### 🔑 Admin Token
 
@@ -183,7 +183,7 @@ The core safety principle is:
 Default address:
 
 ```text
-http://SERVER_IP:6000/
+http://SERVER_IP:7100/
 ```
 
 Languages:
