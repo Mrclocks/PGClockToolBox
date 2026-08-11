@@ -1,6 +1,7 @@
 [Unit]
 Description=PGClockToolBox web panel
-After=network-online.target docker.service
+Documentation=https://github.com/Mrclocks/PGClockToolBox
+After=network-online.target
 Wants=network-online.target
 
 [Service]
@@ -8,13 +9,17 @@ Type=simple
 User=root
 WorkingDirectory=/opt/pgclocktoolbox/backend
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/pgclocktoolbox/backend
 ExecStart=/opt/pgclocktoolbox/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 7100
-Restart=on-failure
+Restart=always
 RestartSec=3
+TimeoutStartSec=30
 
+# Keep enough privileges for server management tooling.
 NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=full
+ProtectHome=true
 ReadWritePaths=/opt/pgclocktoolbox /var/lib/pgclocktoolbox /opt/pasarguard /var/lib/pasarguard
 
 [Install]

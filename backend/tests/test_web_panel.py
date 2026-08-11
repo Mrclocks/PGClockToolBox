@@ -11,6 +11,7 @@ def test_web_route_resolves_entrypoint():
     route_file = Path(__file__).resolve().parents[1] / "app" / "api" / "routes" / "web.py"
     source = route_file.read_text(encoding="utf-8")
     assert 'parents[2] / "web" / "index.html"' in source
+    assert "HTMLResponse" in source
 
     from app.api.routes.web import INDEX
 

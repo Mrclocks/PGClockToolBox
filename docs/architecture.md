@@ -4,7 +4,7 @@
 
 PGClockToolBox is installed on the same Ubuntu 22.04+ server that already runs PasarGuard. It is not a remote management server.
 
-The application listens on TCP port `6000` by default.
+The application listens on TCP port `7100` by default.
 
 ## Traffic/core scope
 

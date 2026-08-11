@@ -21,53 +21,36 @@ Run this command as `root` **on the PasarGuard server itself**:
 curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockToolBox/main/install.sh | bash
 ```
 
-The installer automatically checks Ubuntu/PasarGuard, installs dependencies, creates the Python environment, initializes authentication, installs the systemd service and starts the panel.
+The installer checks Ubuntu/PasarGuard, installs dependencies, deploys the app, creates the admin token, installs the systemd unit, **restarts** the service, opens UFW if active, and verifies that the dashboard HTML responds on port `7100`.
 
 ### 🌐 Open the Web Panel
 
-**The installer prints the exact URL at the end of a successful installation.**
+The installer prints the public URL and admin token when it finishes.
 
-It will look like:
-
-```text
-==================================================
- PGClockToolBox installed successfully
-==================================================
-
-Web Panel:
-  http://YOUR_SERVER_IP:7100/
-
-Admin token:
-  /var/lib/pgclocktoolbox/data/admin_token
-
-Service:
-  systemctl status pgclocktoolbox --no-pager
-
-Logs:
-  journalctl -u pgclocktoolbox -f
-==================================================
+```bash
+# health / URLs / service state
+curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockToolBox/main/install.sh | bash -s -- status
 ```
 
-Open the displayed `http://YOUR_SERVER_IP:7100/` address in your browser.
-
-If the panel does not open, first run:
+If the panel does not open remotely:
 
 ```bash
 systemctl status pgclocktoolbox --no-pager
 ss -lntp | grep ':7100'
-```
-
-Then check:
-
-```bash
 journalctl -u pgclocktoolbox -n 100 --no-pager
 ```
 
-> If port `7100` is blocked by your server provider's firewall/security group, allow TCP port `7100` there as well.
+> Allow TCP `7100` in your cloud/provider firewall (or security group) as well as UFW.
+
+Optional custom port:
+
+```bash
+PGCLOCK_PORT=2096 bash install.sh
+```
 
 ### 🔑 Admin Token
 
-The initial admin token is stored at:
+Printed once by the installer and stored at:
 
 ```text
 /var/lib/pgclocktoolbox/data/admin_token
@@ -85,17 +68,15 @@ journalctl -u pgclocktoolbox -f
 
 ### Uninstall
 
-PGClockToolBox does not currently provide an automatic destructive uninstall command. Preserve any local backups first.
-
 ```bash
-systemctl disable --now pgclocktoolbox
-rm -rf /opt/pgclocktoolbox
-rm -rf /var/lib/pgclocktoolbox
-rm -f /etc/systemd/system/pgclocktoolbox.service
-systemctl daemon-reload
+# keep local backups/config
+curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockToolBox/main/install.sh | bash -s -- uninstall --yes
+
+# also delete /var/lib/pgclocktoolbox (config, logs, backups)
+curl -fsSL https://raw.githubusercontent.com/Mrclocks/PGClockToolBox/main/install.sh | bash -s -- uninstall --purge --yes
 ```
 
-> **Warning:** Removing `/var/lib/pgclocktoolbox` deletes Toolbox configuration, logs and locally stored backups. It does not uninstall or modify PasarGuard.
+> Uninstall never modifies or removes PasarGuard.
 
 ## ✨ What is PGClockToolBox?
 
