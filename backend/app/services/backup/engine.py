@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -16,6 +17,7 @@ from app.core.paths import PASARGUARD_DATA, PASARGUARD_ENV, PASARGUARD_ROOT, TOO
 from app.services.backup.detector import detect_database
 from app.services.backup.integrity import sha256_file
 from app.services.backup.manifest import BackupManifest
+from app.services.nodes import discover_local_nodes
 
 
 @dataclass(slots=True)
@@ -75,8 +77,6 @@ def _database_dump(engine: str, destination: Path) -> None:
     run_env = os.environ.copy()
 
     if engine in {"postgresql", "timescaledb"}:
-        # Plain SQL is intentional: PGClockMG's compatible single-dump contract expects
-        # db_backup.sql, while PostgreSQL custom archives are not that format.
         cmd = ["pg_dump", "--no-owner", "--no-privileges", "--format=plain", "--file", str(destination), "--host", host, "--port", port, "--username", user, database]
         run_env["PGPASSWORD"] = password
     else:
@@ -108,6 +108,37 @@ def _zip_dir(root: Path, archive: Path) -> None:
                 zf.write(path, path.relative_to(root).as_posix())
 
 
+def _node_workdir(service: str) -> Path | None:
+    result = subprocess.run(["systemctl", "show", service, "-p", "WorkingDirectory", "--value"], capture_output=True, text=True, timeout=5, check=False)
+    value = result.stdout.strip()
+    return Path(value) if value and value not in {"/", "-"} and Path(value).is_dir() else None
+
+
+def _collect_local_node_artifacts(root: Path) -> int:
+    count = 0
+    node_root = root / "nodes"
+    for node in discover_local_nodes():
+        name = str(node.get("name", "node"))
+        safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", name)
+        target = node_root / safe
+        workdir = _node_workdir(str(node.get("service"))) if node.get("source") == "systemd" and node.get("service") else None
+        if workdir:
+            target.mkdir(parents=True, exist_ok=True)
+            for filename in (".env", "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"):
+                _copy_tree(workdir / filename, target / filename)
+            for dirname in ("config", "certs", "assets"):
+                if (workdir / dirname).exists():
+                    _copy_tree(workdir / dirname, target / dirname)
+            count += 1
+        elif node.get("source") == "filesystem" and node.get("path"):
+            source = Path(str(node["path"]))
+            if source.is_dir():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                _copy_tree(source, target)
+                count += 1
+    return count
+
+
 def _validate_archive(archive: Path) -> None:
     with zipfile.ZipFile(archive, "r") as zf:
         bad = zf.testzip()
@@ -120,17 +151,16 @@ def _validate_archive(archive: Path) -> None:
         engine = manifest.get("db_engine")
         if engine == "sqlite" and "db.sqlite3" not in names:
             raise RuntimeError("SQLite backup database is missing")
-        if engine in {"postgresql", "timescaledb"} and "db_backup.sql" not in names:
-            raise RuntimeError("PostgreSQL backup dump is missing")
-        if engine in {"mysql", "mariadb"} and "db_backup.sql" not in names:
-            raise RuntimeError("MySQL/MariaDB backup dump is missing")
+        if engine in {"postgresql", "timescaledb", "mysql", "mariadb"} and "db_backup.sql" not in names:
+            raise RuntimeError("SQL database dump is missing")
         if ".env" not in names:
             raise RuntimeError("PasarGuard environment file is missing")
 
 
 def create_full_backup() -> BackupResult:
     TOOLBOX_BACKUPS.mkdir(parents=True, exist_ok=True)
-    engine = detect_database().get("engine")
+    detection = detect_database()
+    engine = detection.get("engine")
     if not engine:
         return BackupResult(False, None, 0, None, None, "Unable to detect PasarGuard database")
 
@@ -147,14 +177,13 @@ def create_full_backup() -> BackupResult:
             else:
                 _database_dump(engine, root / "db_backup.sql")
 
-            # These root-level names intentionally mirror PGClockMG's existing
-            # analyzer/restore layouts. No PGClockMG source changes are required.
             _copy_tree(PASARGUARD_ROOT / ".env", root / ".env")
             for name in ("docker-compose.yml", "compose.yml", "docker-compose.yaml", "compose.yaml"):
                 _copy_tree(PASARGUARD_ROOT / name, root / "pasarguard" / name)
             _copy_tree(PASARGUARD_DATA, root / "pasarguard" / "data")
+            node_count = _collect_local_node_artifacts(root)
 
-            manifest = BackupManifest.create(db_engine=engine)
+            manifest = BackupManifest.create(db_engine=engine, node_count=node_count)
             manifest_path = root / "pgclock" / "manifest.json"
             manifest_path.write_text(json.dumps(manifest.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
             _zip_dir(root, archive)
