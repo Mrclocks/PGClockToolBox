@@ -51,6 +51,11 @@ install -m 0644 "$APP_ROOT/systemd/pgclocktoolbox.service" /etc/systemd/system/p
 systemctl daemon-reload
 systemctl enable --now pgclocktoolbox.service
 
+# If UFW is installed and active, expose only the Toolbox web port.
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
+  ufw allow 6000/tcp >/dev/null
+fi
+
 sleep 2
 if ! systemctl is-active --quiet pgclocktoolbox.service; then
   echo "PGClockToolBox failed to start." >&2
@@ -58,19 +63,37 @@ if ! systemctl is-active --quiet pgclocktoolbox.service; then
   exit 1
 fi
 
-if ! curl -fsS --max-time 5 "http://127.0.0.1:${PORT}/" >/dev/null; then
-  echo "PGClockToolBox service is running but the web panel did not respond on port ${PORT}." >&2
-  echo "Check: journalctl -u pgclocktoolbox -n 100 --no-pager" >&2
+if ! ss -lntp 2>/dev/null | grep -Eq "LISTEN[[:space:]].*(0\.0\.0\.0:${PORT}|\[::\]:${PORT}|:::${PORT})"; then
+  echo "PGClockToolBox service is active but nothing is listening on TCP ${PORT}." >&2
+  journalctl -u pgclocktoolbox --no-pager -n 100 >&2 || true
   exit 1
 fi
 
-SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-SERVER_IP="${SERVER_IP:-YOUR_SERVER_IP}"
+if ! curl -fsS --max-time 5 "http://127.0.0.1:${PORT}/" >/dev/null; then
+  echo "PGClockToolBox is listening but the web panel did not respond on port ${PORT}." >&2
+  journalctl -u pgclocktoolbox --no-pager -n 100 >&2 || true
+  exit 1
+fi
+
+# Prefer the real IPv4 route address. hostname -I may return IPv6 first,
+# which would produce an invalid browser URL without brackets.
+SERVER_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')"
+if [[ -z "$SERVER_IP" ]]; then
+  SERVER_IP="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+(\.[0-9]+){3}$' | head -n1 || true)"
+fi
+SERVER_IP="${SERVER_IP:-YOUR_SERVER_IPV4}"
+
+FIREWALL_NOTE=""
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
+  FIREWALL_NOTE="UFW: TCP ${PORT} allowed"
+else
+  FIREWALL_NOTE="If your provider has a firewall/security group, allow TCP ${PORT}."
+fi
 
 echo
-printf '%s\n' '=================================================='
-printf '%s\n' ' PGClockToolBox installed successfully'
-printf '%s\n' '=================================================='
+echo '=================================================='
+echo ' PGClockToolBox installed successfully'
+echo '=================================================='
 echo
 echo "Web Panel:"
 echo "  http://${SERVER_IP}:${PORT}/"
@@ -84,4 +107,8 @@ echo
 echo "Logs:"
 echo "  journalctl -u pgclocktoolbox -f"
 echo
-echo "=================================================="
+echo "Network:"
+echo "  ss -lntp | grep ':${PORT}'"
+echo "  ${FIREWALL_NOTE}"
+echo
+echo '=================================================='
