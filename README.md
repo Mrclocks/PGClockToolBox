@@ -2,41 +2,55 @@
 
 PasarGuard Server Toolbox — a simple, safe and modern web panel for managing the same server where PasarGuard is installed.
 
-## Scope
-
-- Full PasarGuard + local node backup compatible with PGClockMG
-- Scheduled backups with retention
-- Telegram delivery with optional proxy
-- Server/network optimizer
-- DNS management
-- WARP egress and selective routing
-- GeoIP/GeoSite-style direct/proxy routing for Xray and WireGuard traffic
-- Health monitoring, validation, rollback and auto-recovery
-
 ## Requirements
 
 - Ubuntu 22.04+
-- Installed PasarGuard on the same server
-- Xray and/or WireGuard as used by the PasarGuard installation
+- PasarGuard installed on the same server
+- Xray and/or WireGuard as used by the installation
 - Root privileges
+- Web panel: port `6000`
 
-## Web panel
+## Current capabilities
 
-The panel listens on port `6000` by default.
+- Read-only installation discovery
+- PasarGuard / database / Xray / WireGuard / Docker discovery
+- Full backup engine with SQLite, PostgreSQL, TimescaleDB, MySQL and MariaDB support
+- PGClockMG-compatible archive layouts plus ToolBox manifest
+- Local node recovery artifacts where safely discoverable
+- ZIP integrity validation and SHA-256 checksum
+- Scheduled backups and retention
+- Telegram delivery with HTTP/SOCKS proxy support through curl
+- Automatic Telegram chunking for backups larger than the Bot API multipart limit
+- DNS management with rollback
+- Conservative BBR/network optimizer
+- WARP status/connect/disconnect and selective host/IP controls
+- Routing policy store with domain/IP/CIDR/GeoIP/GeoSite/port rules
+- Xray routing preview and structural validation
+- Health monitoring
+- Conservative service auto-healing
+- Protected audit log
+- Modern responsive Persian-first dashboard
 
-Default language: Persian (`fa`)
+## Routing safety
 
-Supported languages: Persian (`fa`), English (`en`), Russian (`ru`).
+PGClockToolBox deliberately does **not** edit a generated PasarGuard Xray configuration directly. PasarGuard owns core configuration and validates configurations through its API. Direct file edits could be overwritten or break synchronization. The current routing engine therefore supports rule management, preview and validation; live application will use the detected PasarGuard core-config API rather than bypassing it.
 
-## Safety principles
+## Safety model
 
-1. Detect before changing.
-2. Never expose arbitrary shell execution through the web layer.
-3. Validate network changes and keep rollback data.
-4. A backup is successful only after archive integrity validation.
-5. Telegram delivery is separate from local backup success.
-6. PGClockMG is an external compatibility target; its source code is not modified.
+`Detect → Snapshot → Apply → Verify → Rollback/Repair`
 
-## Development status
+The web layer never exposes arbitrary shell execution.
 
-Foundation, backup engine, scheduled delivery, Telegram transport, DNS management, optimizer and WARP controls are implemented on `feature/foundation`. Advanced routing, health/auto-recovery and final hardening remain.
+## Backup compatibility
+
+PGClockMG is an external restore target. **PGClockMG source code is not modified.** The ToolBox backup contract and fixtures must remain compatible with the currently implemented PGClockMG analyzer/restore layouts.
+
+## Languages
+
+- فارسی (`fa`) — default
+- English (`en`)
+- Русский (`ru`)
+
+## Development
+
+The foundation is being developed on `feature/foundation` and CI runs the backend test suite on every push/PR.
