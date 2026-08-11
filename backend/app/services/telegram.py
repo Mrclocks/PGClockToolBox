@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from app.core.paths import TOOLBOX_DATA
 
 CONFIG = TOOLBOX_DATA / "telegram.env"
+TELEGRAM_DOCUMENT_LIMIT = 49 * 1024 * 1024
 
 
 def _safe(value: str, max_len: int = 4096) -> str:
@@ -43,6 +46,28 @@ def send_document(path: Path, token: str, chat_id: str, proxy: str | None = None
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=920, check=False)
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout).strip()[-2000:])
+
+
+def send_backup(path: Path, token: str, chat_id: str, proxy: str | None = None, caption: str | None = None) -> int:
+    """Send a backup as one document or deterministic chunks under Telegram's Bot API limit."""
+    if path.stat().st_size <= TELEGRAM_DOCUMENT_LIMIT:
+        send_document(path, token, chat_id, proxy, caption)
+        return 1
+    count = 0
+    with tempfile.TemporaryDirectory(prefix="pgclock-tg-") as td:
+        chunk_dir = Path(td)
+        with path.open("rb") as source:
+            index = 1
+            while True:
+                data = source.read(TELEGRAM_DOCUMENT_LIMIT)
+                if not data:
+                    break
+                chunk = chunk_dir / f"{path.name}.part{index:03d}"
+                chunk.write_bytes(data)
+                send_document(chunk, token, chat_id, proxy, f"{caption or 'PGClockToolBox backup'} · part {index}")
+                count += 1
+                index += 1
+    return count
 
 
 def config_from_env() -> tuple[str | None, str | None, str | None]:
