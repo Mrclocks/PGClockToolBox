@@ -4,7 +4,7 @@ set -euo pipefail
 APP_ROOT="/opt/pgclocktoolbox"
 VENV="$APP_ROOT/.venv"
 REPO="https://github.com/Mrclocks/PGClockToolBox.git"
-PORT="6000"
+PORT="7100"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Run this installer as root." >&2
@@ -53,7 +53,7 @@ systemctl enable --now pgclocktoolbox.service
 
 # If UFW is installed and active, expose only the Toolbox web port.
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
-  ufw allow 6000/tcp >/dev/null
+  ufw allow 7100/tcp >/dev/null
 fi
 
 sleep 2
